@@ -1,0 +1,25 @@
+# Core dependencies
+torch>=2.5.0
+numpy>=1.24.0
+pandas>=2.0.0
+
+# Transformers and RL
+transformers>=4.51.0  # Required for Qwen3 support
+trl>=0.14.0  # GRPO training
+peft>=0.14.0  # LoRA fine-tuning
+datasets>=3.0.0  # HuggingFace datasets
+
+# Training utilities
+accelerate>=1.2.0
+scikit-learn>=1.3.0
+tqdm>=4.65.0
+
+# Data handling
+openpyxl>=3.1.0  # Excel I/O
+
+# Experiment tracking
+wandb>=0.18.0
+tensorboard>=2.18.0
+
+# Model hosting (optional)
+hf_transfer>=0.1.0

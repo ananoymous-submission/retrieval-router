@@ -1,0 +1,12 @@
+.venv/
+.DS_Store
+**/__pycache__/
+.keys/
+**.log
+.env
+**/Pearl/
+train/outputs/
+models/
+**/wandb/
+**/results_**/
+paper.pdf

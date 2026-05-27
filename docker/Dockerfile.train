@@ -1,0 +1,20 @@
+FROM python:3.10-slim
+
+ENV PYTHONUNBUFFERED=1 \
+    PYTHONDONTWRITEBYTECODE=1 
+
+WORKDIR /app
+
+RUN apt-get update && \
+    apt-get install -y --no-install-recommends build-essential git && \
+    rm -rf /var/lib/apt/lists/*
+
+COPY requirements/training_requirements.txt /tmp/training_requirements.txt
+RUN pip install --upgrade pip && \
+    pip install --no-cache-dir -r /tmp/training_requirements.txt && 
+    
+COPY . /app
+
+ENV PYTHONPATH=/app
+
+CMD ["python", "-m", "train.train"]

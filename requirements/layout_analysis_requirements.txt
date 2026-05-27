@@ -1,0 +1,4 @@
+torch
+numpy
+doclayout_yolo
+huggingface_hub

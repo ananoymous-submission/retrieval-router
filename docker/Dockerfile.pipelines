@@ -1,0 +1,35 @@
+FROM python:3.10-slim
+
+ENV PYTHONUNBUFFERED=1 \
+    PYTHONDONTWRITEBYTECODE=1
+
+WORKDIR /app
+
+RUN apt-get update && \
+    apt-get install -y --no-install-recommends \
+        build-essential \
+        git \
+        libgl1 \
+        libgl1-mesa-glx \
+        libglu1-mesa \
+        libosmesa6 \
+        libxrender1 \
+        libxext6 \
+        libxi6 \
+        ffmpeg \
+        patchelf && \
+    rm -rf /var/lib/apt/lists/*
+
+COPY requirements/base_pipelines_requirements.txt /tmp/requirements.txt
+RUN pip install --upgrade pip && \
+    pip install --no-cache-dir -r /tmp/requirements.txt
+
+COPY docker/run_pipeline.sh /usr/local/bin/run_pipeline.sh
+RUN chmod +x /usr/local/bin/run_pipeline.sh
+
+COPY . /app
+
+ENV PYTHONPATH=/app
+
+ENTRYPOINT ["/usr/local/bin/run_pipeline.sh"]
+CMD ["scripts/retrieval/run_all.sh"]

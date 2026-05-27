@@ -1,0 +1,23 @@
+services:
+
+  trainer:
+    build:
+      context: .
+      dockerfile: docker/Dockerfile.train
+    volumes:
+      - .:/app
+    working_dir: /app
+    tty: true
+    stdin_open: true
+
+  pipelines:
+    build:
+      context: .
+      dockerfile: docker/Dockerfile.pipelines
+    volumes:
+      - .:/app
+    working_dir: /app
+    tty: true
+    stdin_open: true
+    env_file:
+      - .env
