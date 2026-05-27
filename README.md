@@ -24,13 +24,6 @@
   <img src="assets/pareto.png" alt="Pareto Frontier" width="600"/>
 </div>
 
-| Pipeline | nDCG@5 | Latency (s) | Storage (Index) |
-| :--- | :---: | :---: | :---: |
-| Text-Dense (TD) | 0.49 | 0.46 | ~3 GB |
-| Multimodal-Late (ML) | 0.74 | 8.28 | ~39 GB |
-| **RetrievalRouter ($\lambda=0.0$)** | **0.76** | **0.80** | *Hybrid* |
-| **RetrievalRouter ($\lambda=0.7$)** | 0.68 | 0.40 | *Hybrid* |
-
 ---
 
 ## Repository Structure
