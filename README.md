@@ -11,7 +11,7 @@
   <a href="#pre-trained-weights">Pre-trained Weights</a> •
   <a href="#step-1-generate-oracle-labels">Training</a> •
   <a href="#step-3-inference">Inference</a><br>
-  <a href="https://huggingface.co/collections/ananoymous/RetrievalRouter">Model & Datasets</a>
+  <a href="https://huggingface.co/collections/ananoymous/retrievalrouter">Model & Datasets</a>
 </p>
 
 **RetrievalRouter**  is the first system to route jointly across these two axes for a single underlying corpus. By directing each query to the cheapest pipeline that can answer it, the router reserves expensive configurations for queries that genuinely require them. The resulting system attains the accuracy of the strongest static pipeline while incurring an average latency near the cheapest.
