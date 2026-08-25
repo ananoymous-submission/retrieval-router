@@ -1,90 +1,89 @@
+"""Overall routed-vs-baseline metrics for a predictions file.
+
+Usage:
+    python -m evaluation.overall_metrics
+    python -m evaluation.overall_metrics --predictions evaluation/predictions/retrievalrouter_l30.xlsx
+"""
 import os
+import argparse
+
 import pandas as pd
 import numpy as np
 
+from arms import ALL_PIPELINES, DISPLAY_NAMES, POLICY_LATENCY_SECONDS
 
-def calculate_metrics(df, col_prefix):
-    """
-    Calculate mean metrics for a specific pipeline prefix (e.g. 'TEXT-SINGLE')
-    """
+REPO_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+DEFAULT_PREDICTIONS = os.path.join(REPO_ROOT, "evaluation/predictions/retrievalrouter_l10.xlsx")
+DEFAULT_OUTPUT = os.path.join(REPO_ROOT, "evaluation/metrics_summary.xlsx")
+
+METRICS = ["ndcg", "mrr", "recall", "latency"]
+COL_ORDER = ["System", "Type", "NDCG", "MRR", "Recall", "Latency", "Latency_P95", "Latency_P99"]
+
+
+def _summarize(ndcg, mrr, recall, latency):
+    latency = pd.Series(latency)
     return {
-        'NDCG': df[f'{col_prefix}_ndcg'].mean(),
-        'MRR': df[f'{col_prefix}_mrr'].mean(),
-        'Recall': df[f'{col_prefix}_recall'].mean(),
-        'Latency': df[f'{col_prefix}_latency'].mean(),
-        'Latency_P95': df[f'{col_prefix}_latency'].quantile(0.95),
-        'Latency_P99': df[f'{col_prefix}_latency'].quantile(0.99),
+        "NDCG": np.mean(ndcg),
+        "MRR": np.mean(mrr),
+        "Recall": np.mean(recall),
+        "Latency": latency.mean(),
+        "Latency_P95": latency.quantile(0.95),
+        "Latency_P99": latency.quantile(0.99),
     }
 
 
+def calculate_metrics(df, pipeline):
+    """Mean metrics for one fixed pipeline (e.g. 'TEXT-SINGLE')."""
+    return _summarize(*(df[f"{pipeline}_{m}"] for m in METRICS))
+
+
+def routed_metrics(df):
+    """What the router actually achieved: on each query, score the arm it picked."""
+    if "predicted_pipeline" not in df.columns:
+        raise KeyError("predictions file has no 'predicted_pipeline' column")
+
+    picked = df["predicted_pipeline"]
+    unknown = set(picked.unique()) - set(ALL_PIPELINES)
+    if unknown:
+        raise ValueError(f"predicted_pipeline contains unknown pipelines: {sorted(unknown)}")
+
+    # Vectorised gather: for each row, take column f"{picked_arm}_{metric}".
+    rows = np.arange(len(df))
+    cols = picked.map({p: i for i, p in enumerate(ALL_PIPELINES)}).to_numpy()
+    gathered = {
+        m: df[[f"{p}_{m}" for p in ALL_PIPELINES]].to_numpy()[rows, cols]
+        for m in METRICS
+    }
+    gathered["latency"] = gathered["latency"] + POLICY_LATENCY_SECONDS
+    return _summarize(*(gathered[m] for m in METRICS))
+
+
 def main():
-    predictions_file = '/Users/emrekuru/Developer/Kanzy/Research/RAG-Mixer/evaluation/predictions/predictions_rerank.xlsx'
-    output_file = './evaluation/metrics_summary.xlsx'
-    
-    if not os.path.exists(predictions_file):
-        print(f"Prediction file not found: {predictions_file}")
-        return
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("--predictions", default=DEFAULT_PREDICTIONS)
+    parser.add_argument("--output", default=DEFAULT_OUTPUT)
+    args = parser.parse_args()
 
-    base_pipelines = ['TEXT-SINGLE', 'TEXT-MULTI', 'MULTIMODAL-SINGLE', 'MULTIMODAL-MULTI', 'TEXT_RERANK', 'MULTIMODAL_RERANK']
-    
-    all_results = []
-    
-    print(f"Loading {predictions_file}...")
-    df = pd.read_excel(predictions_file)
+    print(f"Loading {args.predictions}...")
+    df = pd.read_excel(args.predictions)
 
-    # RAG-Mixer metrics (based on predicted_strategy)
-    if 'predicted_strategy' in df.columns:
-        rag_metrics = {'NDCG': [], 'MRR': [], 'Recall': [], 'Latency': []}
+    missing = [p for p in ALL_PIPELINES if f"{p}_ndcg" not in df.columns]
+    if missing:
+        raise KeyError(f"predictions file is missing columns for pipelines: {missing}")
 
-        for idx, row in df.iterrows():
-            strat = row['predicted_strategy']
-            rag_metrics['NDCG'].append(row[f"{strat}_ndcg"])
-            rag_metrics['MRR'].append(row[f"{strat}_mrr"])
-            rag_metrics['Recall'].append(row[f"{strat}_recall"])
-            rag_metrics['Latency'].append(row[f"{strat}_latency"])
-
-        rag_series_lat = pd.Series(rag_metrics['Latency'])
-        all_results.append({
-            'System': 'RAG-Mixer',
-            'Type': 'Selection',
-            'NDCG': np.mean(rag_metrics['NDCG']),
-            'MRR': np.mean(rag_metrics['MRR']),
-            'Recall': np.mean(rag_metrics['Recall']),
-            'Latency': rag_series_lat.mean(),
-            'Latency_P95': rag_series_lat.quantile(0.95),
-            'Latency_P99': rag_series_lat.quantile(0.99)
+    rows = [{"System": "RetrievalRouter", "Type": "Selection", **routed_metrics(df)}]
+    for pipeline in ALL_PIPELINES:
+        rows.append({
+            "System": DISPLAY_NAMES[pipeline],
+            "Type": "Base Pipeline",
+            **calculate_metrics(df, pipeline),
         })
-    else:
-        print("Warning: No predicted_strategy column found")
 
-    # Base pipeline metrics
-    for pipeline in base_pipelines:
-        if f"{pipeline}_ndcg" in df.columns:
-            metrics = calculate_metrics(df, pipeline)
-            all_results.append({
-                'System': pipeline,
-                'Type': 'Base Pipeline',
-                'NDCG': metrics['NDCG'],
-                'MRR': metrics['MRR'],
-                'Recall': metrics['Recall'],
-                'Latency': metrics['Latency'],
-                'Latency_P95': metrics['Latency_P95'],
-                'Latency_P99': metrics['Latency_P99']
-            })
-        else:
-            print(f"Warning: Pipeline {pipeline} not found in data")
+    res_df = pd.DataFrame(rows)[COL_ORDER]
+    res_df.to_excel(args.output, index=False)
 
-    # Save
-    res_df = pd.DataFrame(all_results)
-    
-    col_order = ['System', 'Type', 'NDCG', 'MRR', 'Recall', 'Latency', 'Latency_P95', 'Latency_P99']
-    res_df = res_df[col_order]
-    
-    res_df.to_excel(output_file, index=False)
-    print(f"\nSaved metrics summary to {output_file}")
-    
-    print("\nResults:")
-    print(res_df.to_string())
+    print(f"\nSaved metrics summary to {args.output}\n")
+    print(res_df.to_string(index=False, float_format=lambda x: f"{x:.4f}"))
 
 
 if __name__ == "__main__":

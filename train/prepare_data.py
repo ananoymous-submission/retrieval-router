@@ -1,7 +1,8 @@
 import pandas as pd
 from train.config import (
     DATA_PATH, TRAIN_DATA_PATH, VAL_DATA_PATH, TEST_DATA_PATH,
-    SAMPLE_RATE, RANDOM_SEED, LAMBDA
+    SAMPLE_RATE, RANDOM_SEED, LAMBDA, OBJECTIVE,
+    NDCG_COLS, LATENCY_COLS, REWARD_COLS
 )
 
 def load_and_split_data():
@@ -73,26 +74,10 @@ def calculate_rewards(df):
     Calculate rewards using lambda-weighted formula:
     reward = (1 - lambda) * ndcg + lambda * (1 - normalized_latency)
     """
-    
-    # Define column names
-    ndcg_cols = [
-        "MULTIMODAL_RERANK_ndcg", "MULTIMODAL-SINGLE_ndcg",
-        "TEXT_RERANK_ndcg", "TEXT-SINGLE_ndcg"
-    ]
 
-    latency_cols = [
-        "MULTIMODAL_RERANK_latency", "MULTIMODAL-SINGLE_latency",
-        "TEXT_RERANK_latency", "TEXT-SINGLE_latency"
-    ]
-
-    reward_cols = [
-        "MULTIMODAL_RERANK_reward", "MULTIMODAL-SINGLE_reward",
-        "TEXT_RERANK_reward", "TEXT-SINGLE_reward"
-    ]
-
-    # Extract values
-    ndcg_values = df[ndcg_cols].values
-    latency_values = df[latency_cols].values
+    # Extract values (column order follows ARM_NAMES, so arm i == column i everywhere)
+    ndcg_values = df[NDCG_COLS].values
+    latency_values = df[LATENCY_COLS].values
 
     # Per-row normalize latency (This keeps latency relative to the query)
     latency_sum = latency_values.sum(axis=1, keepdims=True)
@@ -108,52 +93,50 @@ def calculate_rewards(df):
     # =========================================================================
 
     # Assign RAW rewards back to DF
-    df[reward_cols[0]] = rewards[:, 0]
-    df[reward_cols[1]] = rewards[:, 1]
-    df[reward_cols[2]] = rewards[:, 2]
-    df[reward_cols[3]] = rewards[:, 3]
+    for i, col in enumerate(REWARD_COLS):
+        df[col] = rewards[:, i]
 
     # Analysis columns
-    df["optimal_reward"] = df[reward_cols].max(axis=1)
-    df["optimal_arm"] = df[reward_cols].idxmax(axis=1).map({
-        "MULTIMODAL_RERANK_reward": 0,
-        "MULTIMODAL-SINGLE_reward": 1,
-        "TEXT_RERANK_reward": 2,
-        "TEXT-SINGLE_reward": 3
-    })
-    
+    arm_index = {col: i for i, col in enumerate(REWARD_COLS)}
+    df["optimal_reward"] = df[REWARD_COLS].max(axis=1)
+    df["optimal_arm"] = df[REWARD_COLS].idxmax(axis=1).map(arm_index)
+
     return df
 
-def save_datasets(train_df, val_df, test_df):
+def save_datasets(train_df, val_df, test_df, paths=None):
+    train_path, val_path, test_path = paths or (TRAIN_DATA_PATH, VAL_DATA_PATH, TEST_DATA_PATH)
     print(f"\nSaving datasets...")
-    train_df.to_excel(TRAIN_DATA_PATH, index=False)
-    print(f"Saved training data to {TRAIN_DATA_PATH}")
-    
-    val_df.to_excel(VAL_DATA_PATH, index=False)
-    print(f"Saved validation data to {VAL_DATA_PATH}")
+    train_df.to_excel(train_path, index=False)
+    print(f"Saved training data to {train_path}")
 
-    test_df.to_excel(TEST_DATA_PATH, index=False)
-    print(f"Saved test data to {TEST_DATA_PATH}")
+    val_df.to_excel(val_path, index=False)
+    print(f"Saved validation data to {val_path}")
+
+    test_df.to_excel(test_path, index=False)
+    print(f"Saved test data to {test_path}")
 
 
-def main():
-    print("=== Dataset Preparation for Neural Multi-Armed Bandit ===\n")
+def main(objective=None, paths=None):
+    """Split the data, then let the objective attach its own training target.
 
-    # Step 1: Split
+    The split is seeded and objective-independent, so every method -- ours and any baseline --
+    trains and is evaluated on exactly the same queries.
+    """
+    from train.objectives import get_objective   # local: prepare_data <-> objectives cycle
+    objective = objective or get_objective(OBJECTIVE)
+
+    print(f"=== Dataset Preparation (objective: {objective.name}) ===\n")
+
+    # Step 1: Split (shared, seeded, identical for every objective)
     train_df, val_df, test_df = load_and_split_data()
-    
-    # Step 2: Calculate Rewards
-    print("\nCalculating rewards for Train set...")
-    train_df = calculate_rewards(train_df)
-    
-    print("Calculating rewards for Val set...")
-    val_df = calculate_rewards(val_df)
-    
-    print("Calculating rewards for Test set...")
-    test_df = calculate_rewards(test_df)
+
+    # Step 2: Attach this objective's target
+    for name, df in [("Train", train_df), ("Val", val_df), ("Test", test_df)]:
+        print(f"\nBuilding targets for {name} set...")
+        objective.add_targets(df)
 
     # Step 3: Save
-    save_datasets(train_df, val_df, test_df)
+    save_datasets(train_df, val_df, test_df, paths)
 
     print("\n=== Dataset Preparation Complete ===")
     print(f"Train samples: {len(train_df)}")

@@ -24,6 +24,7 @@ from train.config import (
     WEIGHT_DECAY,
     WARMUP_RATIO,
     OUTPUT_DIR,
+    OBJECTIVE,
     LORA_R,
     LORA_ALPHA,
     LORA_DROPOUT,
@@ -37,21 +38,18 @@ from train.inference import evaluate_model, compute_metrics
 
 os.environ["CUDA_VISIBLE_DEVICES"] = "0"
 
-REWARD_COLS = [
-    "MULTIMODAL_RERANK_reward",
-    "MULTIMODAL-SINGLE_reward",
-    "TEXT_RERANK_reward",
-    "TEXT-SINGLE_reward",
-]
+from train.objectives import Objective, get_objective
 
-def load_data():
+
+def load_data(paths=None):
     """Load training, validation, and test data."""
+    train_path, val_path, test_path = paths or (TRAIN_DATA_PATH, VAL_DATA_PATH, TEST_DATA_PATH)
     print("=" * 80)
     print("LOADING DATA")
     print("=" * 80)
-    train_df = pd.read_excel(TRAIN_DATA_PATH)
-    val_df = pd.read_excel(VAL_DATA_PATH)
-    test_df = pd.read_excel(TEST_DATA_PATH)
+    train_df = pd.read_excel(train_path)
+    val_df = pd.read_excel(val_path)
+    test_df = pd.read_excel(test_path)
 
     print(f"Train samples: {len(train_df)}")
     print(f"Val samples:   {len(val_df)}")
@@ -61,18 +59,16 @@ def load_data():
     return train_df, val_df, test_df
 
 
-def create_datasets(train_df, val_df, test_df, tokenizer):
-    """Create tokenized datasets with soft labels (reward scores)."""
+def create_datasets(train_df, val_df, test_df, tokenizer, objective: Objective):
+    """Tokenize the queries and attach whatever target the objective defines."""
     print("\n" + "=" * 80)
     print("PREPARING DATASETS")
     print("=" * 80)
 
     def df_to_dataset(df):
-        labels = [list(r) for r in df[REWARD_COLS].to_numpy()]
-
         ds = Dataset.from_dict({
             "text": df["query"].tolist(),
-            "labels": labels
+            "labels": objective.targets(df)
         })
 
         ds = ds.map(
@@ -100,35 +96,46 @@ def create_datasets(train_df, val_df, test_df, tokenizer):
     return train_dataset, val_dataset, test_dataset
 
 
-class SoftLabelTrainer(Trainer):
-    """Custom trainer for soft label learning."""
+class ObjectiveTrainer(Trainer):
+    """Runs whichever training signal the Objective defines. The model only ever returns logits."""
+
+    def __init__(self, *args, objective: Objective, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.objective = objective
 
     def compute_loss(self, model, inputs, return_outputs=False, **kwargs):
         labels = inputs.pop("labels")
-
         device = next(model.parameters()).device
 
         if not isinstance(labels, torch.Tensor):
-            labels = torch.tensor(labels, dtype=torch.float32, device=device)
+            labels = torch.tensor(labels, dtype=self.objective.label_dtype, device=device)
         else:
-            labels = labels.to(dtype=torch.float32, device=device)
+            labels = labels.to(dtype=self.objective.label_dtype, device=device)
 
         outputs = model(
             input_ids=inputs["input_ids"],
             attention_mask=inputs["attention_mask"],
-            labels=labels
         )
 
-        loss = outputs["loss"]
-
+        loss = self.objective.loss(outputs["logits"].float(), labels)
         return (loss, outputs) if return_outputs else loss
 
 
-def main():
-    """Main training pipeline."""
+def main(objective: Objective = None, paths=None, output_dir: str = None):
+    """Main training pipeline.
+
+    `objective` is the ONLY thing a different routing method changes: it supplies the target
+    and the loss. Everything below -- encoder, LoRA, pooling, head, split, tokenisation,
+    optimiser, schedule, checkpoint selection -- is shared, so a baseline that passes its own
+    Objective is identical to RetrievalRouter by construction rather than by inspection.
+    """
+    objective = objective or get_objective(OBJECTIVE)
+    output_dir = output_dir or OUTPUT_DIR
+
     print("\n" + "=" * 80)
-    print("RAG STRATEGY CLASSIFIER - QWEN3-0.6B FINE-TUNING")
+    print("RETRIEVALROUTER - QWEN3-0.6B FINE-TUNING")
     print("=" * 80)
+    print(f"Objective: {objective.name}")
     print(f"Model: {MODEL_NAME}")
     print(f"Device: {device}")
     print(f"Precision: {DTYPE}")
@@ -136,7 +143,7 @@ def main():
     print("=" * 80)
 
     # 1. Load data
-    train_df, val_df, test_df = load_data()
+    train_df, val_df, test_df = load_data(paths)
 
     # 2. Load tokenizer
     print("\n" + "=" * 80)
@@ -152,7 +159,17 @@ def main():
         tokenizer.pad_token = tokenizer.eos_token
 
     # 3. Create datasets
-    train_dataset, val_dataset, test_dataset = create_datasets(train_df, val_df, test_df, tokenizer)
+    train_dataset, val_dataset, test_dataset = create_datasets(
+        train_df, val_df, test_df, tokenizer, objective
+    )
+
+    # Checkpoints are scored on the objective's own eval matrix, so a hard class target works
+    # here just as well as RetrievalRouter's reward vector.
+    val_matrix = objective.eval_matrix(val_df)
+
+    def eval_metrics(eval_pred):
+        logits, _ = eval_pred
+        return compute_metrics((logits, val_matrix))
 
     # 4. Load base model
     print("\n" + "=" * 80)
@@ -193,7 +210,7 @@ def main():
 
     # 7. Training arguments
     training_args = TrainingArguments(
-        output_dir=OUTPUT_DIR,
+        output_dir=output_dir,
 
         # Training
         num_train_epochs=EPOCHS,
@@ -219,7 +236,7 @@ def main():
         greater_is_better=True,
 
         # Logging
-        logging_dir=os.path.join(OUTPUT_DIR, "logs"),
+        logging_dir=os.path.join(output_dir, "logs"),
         logging_steps=10,
         logging_first_step=True,
         report_to=["tensorboard"],
@@ -229,17 +246,22 @@ def main():
         seed=42,
         dataloader_num_workers=4,
         remove_unused_columns=False,
+        # The model's forward() takes no `labels` (the loss lives in the Objective), so Trainer
+        # cannot infer the label column from its signature and would forward `labels` straight
+        # into the model. Name it explicitly so prediction_step routes it to compute_loss.
+        label_names=["labels"],
     )
 
     # 8. Create trainer
-    trainer = SoftLabelTrainer(
+    trainer = ObjectiveTrainer(
         model=model,
         args=training_args,
+        objective=objective,
         train_dataset=train_dataset,
         eval_dataset=val_dataset,
         processing_class=tokenizer,
         data_collator=DataCollatorWithPadding(tokenizer),
-        compute_metrics=compute_metrics,
+        compute_metrics=eval_metrics,
     )
 
     # 9. Train
@@ -252,7 +274,7 @@ def main():
     print("\n" + "=" * 80)
     print("SAVING MODEL")
     print("=" * 80)
-    adapter_path = os.path.join(OUTPUT_DIR, "lora_adapter")
+    adapter_path = os.path.join(output_dir, "lora_adapter")
     model.base_model.save_pretrained(adapter_path)
     tokenizer.save_pretrained(adapter_path)
 
@@ -261,6 +283,10 @@ def main():
 
     print(f"LoRA adapter saved to {adapter_path}")
     print(f"Classifier weights saved to {classifier_path}")
+
+    # load_best_model_at_end=True, so `model` is the best epoch. Hand it back so the caller
+    # can persist it however it needs (RetrievalRouter may push it; baselines keep it local).
+    return model, tokenizer
 
 
 if __name__ == "__main__":

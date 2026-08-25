@@ -1,0 +1,6 @@
+numpy>=1.24,<3
+pandas>=2.0,<3
+scipy>=1.11,<2
+statsmodels>=0.14,<1
+openpyxl>=3.1,<4
+tabulate>=0.9,<1

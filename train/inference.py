@@ -21,20 +21,13 @@ from train.config import (
 
 INFERENCE_BATCH_SIZE = 32
 
-# HuggingFace Hub model ID
-HF_MODEL_ID = "ananoymous/IRouterLM"
-
-REWARD_COLS = [
-    "MULTIMODAL_RERANK_reward",
-    "MULTIMODAL-SINGLE_reward",
-    "TEXT_RERANK_reward",
-    "TEXT-SINGLE_reward",
-]
+# HuggingFace Hub model ID (override via env for a lambda sweep)
+HF_MODEL_ID: str | None = os.getenv("ROUTER_MODEL_ID")
 
 
-def load_model(model_id: str = HF_MODEL_ID):
+def load_model(model_id: str | None = None):
     """
-    Load the IRouterLM model from HuggingFace Hub.
+    Load the RetrievalRouter model from HuggingFace Hub.
 
     Args:
         model_id: HuggingFace model ID
@@ -42,6 +35,10 @@ def load_model(model_id: str = HF_MODEL_ID):
     Returns:
         Tuple of (model, tokenizer)
     """
+    model_id = model_id or HF_MODEL_ID
+    if not model_id:
+        raise ValueError("Set ROUTER_MODEL_ID or pass model_id explicitly")
+
     print("=" * 80)
     print("LOADING MODEL FROM HUGGINGFACE HUB")
     print("=" * 80)
@@ -72,13 +69,9 @@ def load_test_data(test_path: str = None):
 
 
 def create_test_dataset(test_df: pd.DataFrame, tokenizer):
-    """Create tokenized dataset from test dataframe."""
-    labels = [list(r) for r in test_df[REWARD_COLS].to_numpy()]
-
-    ds = Dataset.from_dict({
-        "text": test_df["query"].tolist(),
-        "labels": labels
-    })
+    """Tokenize the queries. No targets: inference only needs logits, and requiring a target
+    here would tie inference to one objective's columns."""
+    ds = Dataset.from_dict({"text": test_df["query"].tolist()})
 
     ds = ds.map(
         lambda x: tokenizer(
@@ -91,7 +84,7 @@ def create_test_dataset(test_df: pd.DataFrame, tokenizer):
         desc="Tokenizing"
     )
 
-    ds.set_format(type="torch", columns=["input_ids", "attention_mask", "labels"])
+    ds.set_format(type="torch", columns=["input_ids", "attention_mask"])
     return ds
 
 
@@ -159,9 +152,6 @@ def run_inference(model, tokenizer, test_df: pd.DataFrame, batch_size: int = INF
 
     test_dataset = create_test_dataset(test_df, tokenizer)
 
-    # Remove labels column for DataLoader (not needed for inference)
-    test_dataset = test_dataset.remove_columns(["labels"])
-
     data_collator = DataCollatorWithPadding(tokenizer)
     dataloader = DataLoader(
         test_dataset,
@@ -185,7 +175,8 @@ def run_inference(model, tokenizer, test_df: pd.DataFrame, batch_size: int = INF
     return pred_probs
 
 
-def evaluate_model(model, tokenizer, test_df: pd.DataFrame, save_predictions: bool = True):
+def evaluate_model(model, tokenizer, test_df: pd.DataFrame, save_predictions: bool = True,
+                   objective=None):
     """
     Evaluate model on test set and optionally save predictions.
 
@@ -198,8 +189,14 @@ def evaluate_model(model, tokenizer, test_df: pd.DataFrame, save_predictions: bo
     Returns:
         Dictionary of metrics
     """
+    from train.objectives import get_objective
+    from train.config import OBJECTIVE
+    objective = objective or get_objective(OBJECTIVE)
+
     pred_probs = run_inference(model, tokenizer, test_df)
-    true_ndcgs = test_df[REWARD_COLS].to_numpy()
+    # The matrix the method is judged on: rewards for RetrievalRouter, raw nDCG for hard-label
+    # baselines that have no reward.
+    true_ndcgs = objective.eval_matrix(test_df)
 
     # Compute metrics
     logits = np.log(pred_probs + EPS)  # Convert back for compute_metrics
@@ -226,10 +223,10 @@ def evaluate_model(model, tokenizer, test_df: pd.DataFrame, save_predictions: bo
 
         # Predicted vs True logic
         results_df["predicted_label"] = np.argmax(pred_probs, axis=1)
-        results_df["predicted_strategy"] = [ARM_NAMES[i] for i in results_df["predicted_label"]]
+        results_df["predicted_pipeline"] = [ARM_NAMES[i] for i in results_df["predicted_label"]]
 
         results_df["true_label"] = np.argmax(true_ndcgs, axis=1)
-        results_df["true_strategy"] = [ARM_NAMES[i] for i in results_df["true_label"]]
+        results_df["true_pipeline"] = [ARM_NAMES[i] for i in results_df["true_label"]]
 
         results_df["predicted_ndcg"] = [
             true_ndcgs[i, results_df["predicted_label"].iloc[i]]
@@ -256,7 +253,7 @@ def evaluate_model(model, tokenizer, test_df: pd.DataFrame, save_predictions: bo
 def main():
     """Main inference pipeline."""
     print("\n" + "=" * 80)
-    print("RAG STRATEGY CLASSIFIER - INFERENCE")
+    print("RETRIEVALROUTER - INFERENCE")
     print("=" * 80)
     print(f"Model: {HF_MODEL_ID}")
     print(f"Device: {device}")

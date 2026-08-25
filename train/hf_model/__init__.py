@@ -1,4 +1,4 @@
-from .configuration_irouterlm import IRouterLMConfig
-from .modeling_irouterlm import IRouterLMModel
+from .configuration_retrievalrouter import RetrievalRouterConfig
+from .modeling_retrievalrouter import RetrievalRouterModel
 
-__all__ = ["IRouterLMConfig", "IRouterLMModel"]
+__all__ = ["RetrievalRouterConfig", "RetrievalRouterModel"]

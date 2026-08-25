@@ -1,18 +1,22 @@
-"""IRouterLM Model."""
+"""RetrievalRouter model."""
 import torch
 import torch.nn as nn
-from transformers import PreTrainedModel, Qwen3Model
-from .configuration_irouterlm import IRouterLMConfig
+from transformers import AutoConfig, PreTrainedModel, Qwen3Model
+from .configuration_retrievalrouter import RetrievalRouterConfig
 
 
-class IRouterLMModel(PreTrainedModel):
-    """RAG Strategy Router - classifies queries into optimal retrieval strategies."""
-    config_class = IRouterLMConfig
+class RetrievalRouterModel(PreTrainedModel):
+    """RetrievalRouter model that classifies queries into retrieval pipelines."""
+    config_class = RetrievalRouterConfig
     _no_split_modules = ["Qwen3DecoderLayer"]
 
-    def __init__(self, config: IRouterLMConfig):
+    def __init__(self, config: RetrievalRouterConfig):
         super().__init__(config)
-        self.transformer = Qwen3Model.from_pretrained(config.base_model_name, trust_remote_code=True)
+        # Build the base architecture only; the merged base weights are loaded from this
+        # checkpoint's model.safetensors by from_pretrained. Calling Qwen3Model.from_pretrained
+        # here breaks under the meta-device init that from_pretrained uses.
+        base_config = AutoConfig.from_pretrained(config.base_model_name)
+        self.transformer = Qwen3Model(base_config)
         self.dropout = nn.Dropout(config.classifier_dropout)
         self.classifier = nn.Linear(config.hidden_size, config.num_labels)
         self.post_init()
@@ -48,4 +52,4 @@ class IRouterLMModel(PreTrainedModel):
             probs = torch.softmax(logits, dim=-1)
             preds = probs.argmax(dim=-1)
         return {"predictions": preds, "probabilities": probs, 
-                "strategy_names": [self.config.strategy_names[p.item()] for p in preds]}
+                "pipeline_names": [self.config.pipeline_names[p.item()] for p in preds]}
