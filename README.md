@@ -14,10 +14,11 @@
 This repository is the official implementation of [**RetrievalRouter: Joint Modality and Architecture Selection for Document Retrieval**](https://arxiv.org/pdf/2608.23176).
 
 <p align="center">
+  <a href="#motivation">Motivation</a> ·
+  <a href="#results">Results</a> ·
+  <a href="#models-data-and-predictions">Models & Data</a> ·
   <a href="#quick-start">Quick Start</a> ·
-  <a href="#models-data-and-predictions">Artifacts</a> ·
-  <a href="#training">Training</a> ·
-  <a href="#evaluation">Evaluation</a> ·
+  <a href="#repository-structure">Repository</a> ·
   <a href="#citation">Citation</a>
 </p>
 
