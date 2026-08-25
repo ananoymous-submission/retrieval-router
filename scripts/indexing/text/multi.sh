@@ -1,60 +1,63 @@
-python -c "from dotenv import load_dotenv; load_dotenv('.env')"
+#!/usr/bin/env bash
+set -euo pipefail
+
+HF_NAMESPACE="${HF_NAMESPACE:-emrekuruu}"
 
 export PIPELINE_NAME="TEXT-MULTI"
 export TEXT_MULTI_EMBEDDER="colbert"
 export TEXT_MULTI_VECTOR_SIZE=128
 
 export TASK=finreport
-export DATASET=X/FinReport
+export DATASET=${HF_NAMESPACE}/FinReport
 
 python -m data_collection.pipelines.indexing
 
 export TASK=finslides
-export DATASET=X/FinSlides
+export DATASET=${HF_NAMESPACE}/FinSlides
 
 python -m data_collection.pipelines.indexing
 
 export TASK=finqa
-export DATASET=X/FinQA
+export DATASET=${HF_NAMESPACE}/FinQA
 
 python -m data_collection.pipelines.indexing
 
 export TASK=convfinqa
-export DATASET=X/ConvFinQA
+export DATASET=${HF_NAMESPACE}/ConvFinQA
 
 python -m data_collection.pipelines.indexing
 
 export TASK=vqaonbd
-export DATASET=X/VQAonBD
+export DATASET=${HF_NAMESPACE}/VQAonBD
 
 python -m data_collection.pipelines.indexing
 
 export TASK=tatdqa
-export DATASET=X/TATDQA
+export DATASET=${HF_NAMESPACE}/TATDQA
 
 python -m data_collection.pipelines.indexing
 
 export TASK=arxivqa
-export DATASET=X/ArxivQA
+export DATASET=${HF_NAMESPACE}/ArxivQA
 
 python -m data_collection.pipelines.indexing 
 
 export TASK=mp-docvqa
-export DATASET=X/MP-DocVQA
+export DATASET=${HF_NAMESPACE}/MP-DocVQA
 
 python -m data_collection.pipelines.indexing 
 
 export TASK=mp-sciqag
-export DATASET=X/SciQAG
+export DATASET=${HF_NAMESPACE}/SciQAG
 
 python -m data_collection.pipelines.indexing 
 
 export TASK=dude
-export DATASET=X/DUDE
+export DATASET=${HF_NAMESPACE}/DUDE
 
 python -m data_collection.pipelines.indexing 
 
 export TASK=wiki-ss
-export DATASET=X/Wiki-ss
+export DATASET=${HF_NAMESPACE}/Wiki-ss
 
 python -m data_collection.pipelines.indexing 
