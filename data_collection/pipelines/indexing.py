@@ -7,7 +7,7 @@ from typing import Dict, Any, TypedDict
 from langgraph.graph import StateGraph, START, END
 from data_collection.pipelines import database_mapping, embedder_mapping, TASK
 from data_collection.dataset_loader import load_dataset_for_benchmark
-from data_collection.vector_dabases import BaseVectorDatabase
+from data_collection.vector_databases import BaseVectorDatabase
 
 class SingleDocumentState(TypedDict):
     """State for single document processing workflow"""

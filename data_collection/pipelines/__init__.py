@@ -1,7 +1,7 @@
 import os
 from dotenv import load_dotenv
 from data_collection.embedders import EmbedderConfig, EmbedderFactory
-from data_collection.vector_dabases import DatabaseConfig, VectorDatabaseFactory
+from data_collection.vector_databases import DatabaseConfig, VectorDatabaseFactory
 
 # Load environment variables from .env file
 load_dotenv('.env')

@@ -2,7 +2,7 @@ python -c "from dotenv import load_dotenv; load_dotenv('.env')"
 
 export PIPELINE_NAME="MULTIMODAL-SINGLE"
 export MULTIMODAL_SINGLE_EMBEDDER="biqwen"
-export TEXT_SINGLE_VECTOR_SIZE=3584
+export MULTIMODAL_SINGLE_VECTOR_SIZE=3584
 
 export TASK=finreport
 export DATASET=X/FinReport

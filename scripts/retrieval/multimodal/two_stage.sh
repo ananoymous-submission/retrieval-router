@@ -5,7 +5,7 @@ export TWO_STAGE_MODE="multimodal"  # Options: "multimodal" or "text"
 
 # Multimodal mode embedders
 export MULTIMODAL_SINGLE_EMBEDDER="biqwen"
-export MULTIMODAL_SINGLE_VECTOR_SIZE=768
+export MULTIMODAL_SINGLE_VECTOR_SIZE=3584
 export MULTIMODAL_MULTI_EMBEDDER="colqwen"
 export MULTIMODAL_MULTI_VECTOR_SIZE=128
 
