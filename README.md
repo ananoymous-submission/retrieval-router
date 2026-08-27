@@ -2,7 +2,7 @@
 
 <p align="center">
   <a href="https://2026.emnlp.org"><img src="https://img.shields.io/badge/EMNLP-2026-4B6BFB" alt="EMNLP 2026"></a>
-  <a href="https://arxiv.org/pdf/2608.23176"><img src="https://img.shields.io/badge/Paper-PDF-B31B1B?logo=arxiv" alt="Paper PDF"></a>
+  <a href="https://arxiv.org/pdf/2608.25625"><img src="https://img.shields.io/badge/Paper-PDF-B31B1B?logo=arxiv" alt="Paper PDF"></a>
   <a href="https://huggingface.co/collections/emrekuruu/retrieval-router"><img src="https://img.shields.io/badge/🤗-Models%20%26%20Datasets-FFD21E" alt="Models and datasets"></a>
   <a href="LICENSE"><img src="https://img.shields.io/badge/License-MIT-2EA44F" alt="MIT License"></a>
 </p>
