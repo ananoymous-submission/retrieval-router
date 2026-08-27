@@ -170,11 +170,14 @@ retrieval-router/
 ## Citation
 
 ```bibtex
-@inproceedings{kuru2026retrievalrouter,
-  title     = {RetrievalRouter: Joint Modality and Architecture Selection for Document Retrieval},
-  author    = {Kuru, Emre and Keskin, Mehmet Onur and Farahbakhsh, Reza and Crespi, Noel},
-  booktitle = {Proceedings of the 2026 Conference on Empirical Methods in Natural Language Processing},
-  year      = {2026}
+@misc{kuru2026retrievalrouterjointmodalityarchitecture,
+      title={RetrievalRouter: Joint Modality and Architecture Selection for Document Retrieval}, 
+      author={Emre Kuru and Mehmet Onur Keskin and Reza Farahbakhsh and Noel Crespi},
+      year={2026},
+      eprint={2608.25625},
+      archivePrefix={arXiv},
+      primaryClass={cs.IR},
+      url={https://arxiv.org/abs/2608.25625}, 
 }
 ```
 
